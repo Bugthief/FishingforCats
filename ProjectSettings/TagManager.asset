@@ -41,9 +41,9 @@ TagManager:
   - name: Default
     uniqueID: 0
     locked: 0
-  - name: trees
-    uniqueID: 2320757667
-    locked: 0
   - name: lake
     uniqueID: 3184311905
+    locked: 0
+  - name: trees
+    uniqueID: 2320757667
     locked: 0
