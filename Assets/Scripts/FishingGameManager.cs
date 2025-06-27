@@ -26,6 +26,12 @@ public class FishingGameManager : MonoBehaviour
     [Tooltip("钓鱼小游戏控制器")]
     public FishingMinigame minigameController;
     
+    [Tooltip("鱼类管理器")]
+    public FishesManager fishesManager;
+    
+    [Tooltip("钓竿管理器")]
+    public PoleManager poleManager;
+    
     [Tooltip("鱼获得面板")]
     public GameObject fishRewardPanel;
     
@@ -293,7 +299,10 @@ public class FishingGameManager : MonoBehaviour
                 break;
                 
             case FishingState.Biting:
-                // 进入上钩状态，播放上钩音效和显示上钩提示
+                // 进入上钩状态，选择鱼并准备小游戏
+                PrepareFishForMinigame();
+                
+                // 播放上钩音效和显示上钩提示
                 if (audioSource != null && bitingSound != null)
                 {
                     audioSource.PlayOneShot(bitingSound);
@@ -305,7 +314,7 @@ public class FishingGameManager : MonoBehaviour
                 
             case FishingState.Minigame:
                 // 进入小游戏状态，启动小游戏
-                minigameController.StartGame();
+                //minigameController.StartGame();
                 onMinigameState?.Invoke();
                 break;
                 
@@ -326,6 +335,53 @@ public class FishingGameManager : MonoBehaviour
     {
         yield return new WaitForSeconds(delay);
         SetState(newState);
+    }
+    
+    /// <summary>
+    /// 为小游戏准备鱼
+    /// </summary>
+    private void PrepareFishForMinigame()
+    {
+        if (fishesManager != null)
+        {
+            // 让鱼类管理器为小游戏准备鱼
+            fishesManager.PrepareFishForMinigame();
+        }
+        else
+        {
+            Debug.LogWarning("FishingGameManager: FishesManager引用为空，无法准备鱼类数据！");
+        }
+    }
+    
+    /// <summary>
+    /// 应用钓竿加成到等待时间
+    /// </summary>
+    private void ApplyPoleBonus()
+    {
+        if (poleManager != null)
+        {
+            // 应用钓竿的等待时间减少
+            float waitTimeReduction = poleManager.GetWaitTimeReduction();
+            minWaitTime = Mathf.Max(1f, minWaitTime - waitTimeReduction);
+            maxWaitTime = Mathf.Max(2f, maxWaitTime - waitTimeReduction);
+            
+            // 应用钓竿的上钩时间减少
+            float bitingTimeReduction = poleManager.GetBitingTimeReduction();
+            bitingDuration = Mathf.Max(1f, bitingDuration - bitingTimeReduction);
+        }
+    }
+    
+    /// <summary>
+    /// 获取当前选中的鱼数据
+    /// </summary>
+    /// <returns>当前选中的鱼数据</returns>
+    public FishData GetCurrentSelectedFishData()
+    {
+        if (fishesManager != null)
+        {
+            return fishesManager.GetCurrentSelectedFishData();
+        }
+        return null;
     }
     
     /// <summary>

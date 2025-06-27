@@ -16,60 +16,59 @@ public class FishingMinigame : MonoBehaviour
     [Header("游戏对象引用")]
     [Tooltip("矩形外框（竖直放置）")]
     public Transform frameRect;
-    
+
     [Tooltip("目标区域（判定区）")]
     public Transform targetArea;
-    
+
     [Tooltip("可移动的鱼Sprite")]
     public Transform fishImage;
-    
-    [Header("目标区域设置")]
-    [Tooltip("目标区域活动范围的最小值（0-1之间）")]
-    [Range(0f, 1f)]
-    public float targetMinRange = 0.2f;
-    
-    [Tooltip("目标区域活动范围的最大值（0-1之间）")]
-    [Range(0f, 1f)]
-    public float targetMaxRange = 0.8f;
-    
-    [Tooltip("目标区域移动速度")]
-    public float targetMoveSpeed = 100f;
-    
+
+    [Header("动画控制")]
+    [Tooltip("目标区域的Animator组件")]
+    public Animator targetAreaAnimator;
+
+    [Tooltip("鱼的Animator组件")]
+    public Animator fishAnimator;
+
+    [Tooltip("目标区域动画机的难度参数名")]
+    public string targetDifficultyParameterName = "DifficultyLevel";
+
+    [Tooltip("鱼动画机的难度参数名")]
+    public string fishDifficultyParameterName = "DifficultyLevel";
+
+    [Header("鱼&钓竿脚本引用")]
+    [Tooltip("鱼的Fish脚本组件，用于获取难度等级")]
+    public Fish fishScript;
+    public PoleManager poleManager;
+
     [Header("鱼的设置")]
-    [Tooltip("鱼向上移动的固定速度")]
-    public float fishUpwardSpeed = 50f;
-    
-    [Tooltip("鱼上下摆动的最小速度")]
-    public float fishBobMinSpeed = 20f;
-    
-    [Tooltip("鱼上下摆动的最大速度")]
-    public float fishBobMaxSpeed = 60f;
-    
-    [Tooltip("鱼上下摆动的最大幅度")]
-    public float fishBobAmplitude = 30f;
-    
+    [Tooltip("鱼的起始Y轴位置（相对坐标）")]
+    public float fishStartY = -4f;
+
+    // [Tooltip("鱼向上移动的初始速度")]
+    // public float fishInitialSpeed = 1f;
+
+    // [Tooltip("鱼向上移动的加速度")]
+    // public float fishAcceleration = 0.5f;
+
     [Header("交互设置")]
     [Tooltip("成功按键")]
     public KeyCode successKey = KeyCode.Space;
-    
-    [Header("事件")]
+
+    [Header("游戏事件")]
     [Tooltip("成功捕获鱼时触发")]
     public UnityEvent onFishCaught;
-    
+
     [Tooltip("鱼逃脱时触发")]
     public UnityEvent onFishEscaped;
 
-    
+
+
     // 私有变量
-    private bool isMovingRight = true;
-    private float targetCurrentPosition;
-    private float fishBobSpeed;
-    private float fishBobPhase;
     private Vector3 fishStartPosition;
-    private float frameHeight = 10f; // 游戏区域高度
-    private float fishBaseY; // 鱼的基础Y位置（不包括摆动）
-    private float minY, maxY; // 游戏区域的Y轴边界
-    
+    private float currentFishSpeed; // 当前鱼的速度
+    private float gameStartTime; // 游戏开始时间
+
     /// <summary>
     /// 初始化游戏
     /// </summary>
@@ -82,117 +81,217 @@ public class FishingMinigame : MonoBehaviour
             enabled = false;
             return;
         }
-        
-        // 初始化变量（使用世界坐标）
-        frameHeight = 10f; // 默认游戏区域高度，可以在Inspector中调整
+
+        // 初始化鱼的起始位置（使用相对Y坐标）
         fishStartPosition = fishImage.position;
-        
-        // 计算游戏区域边界
-        Vector3 framePos = frameRect.position;
-        float halfHeight = frameHeight / 2f;
-        // 假设框架底部为游戏区域底部，顶部为游戏区域顶部
-        // 您可以根据实际需要调整这些值
-        
+        fishStartPosition.y = fishStartY;
+
         // 游戏开始时不激活
         isGameActive = false;
     }
-    
+
     /// <summary>
     /// 开始钓鱼小游戏
     /// </summary>
     public void StartGame()
     {
         if (isGameActive) return;
-        
-        // 重置位置
+
+        // 重置鱼的位置
         fishImage.position = fishStartPosition;
-        fishBaseY = fishStartPosition.y;
-        targetCurrentPosition = (targetMinRange + targetMaxRange) / 2f;
-        UpdateTargetPosition();
-        
-        // 随机生成鱼的摆动速度
-        fishBobSpeed = Random.Range(fishBobMinSpeed, fishBobMaxSpeed);
-        fishBobPhase = 0f;
-        
+
+        // 初始化运动参数
+        //currentFishSpeed = fishInitialSpeed;
+        gameStartTime = Time.time;
+
+        // 根据难度等级触发相应的动画事件
+        TriggerAnimationsByDifficulty();
+
         isGameActive = true;
     }
+
+    /// <summary>
+    /// 根据难度等级设置动画机参数
+    /// </summary>
+    private void TriggerAnimationsByDifficulty()
+    {
+        // 从鱼脚本获取难度等级
+        int difficultyLevel = GetFishDifficultyFromScript();
+        
+        Debug.Log($"设置动画难度等级: {difficultyLevel}");
+
+        // 设置目标区域动画机的难度参数
+        if (targetAreaAnimator != null && !string.IsNullOrEmpty(targetDifficultyParameterName))
+        {
+            // 检查Animator是否有有效的Controller
+            if (targetAreaAnimator.runtimeAnimatorController != null)
+            {
+                // 检查参数是否存在
+                if (HasAnimatorParameter(targetAreaAnimator, targetDifficultyParameterName, AnimatorControllerParameterType.Int))
+                {
+                    targetAreaAnimator.SetInteger(targetDifficultyParameterName, difficultyLevel);
+                    Debug.Log($"目标区域动画机参数 '{targetDifficultyParameterName}' 设置为: {difficultyLevel}");
+                }
+                else
+                {
+                    Debug.LogWarning($"目标区域动画机中没有找到整数参数: {targetDifficultyParameterName}");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("目标区域Animator没有分配AnimatorController！");
+            }
+        }
+        else
+        {
+            Debug.LogWarning("目标区域Animator引用为空或参数名为空");
+        }
+
+        // 设置鱼动画机的难度参数
+        if (fishAnimator != null && !string.IsNullOrEmpty(fishDifficultyParameterName))
+        {
+            // 检查Animator是否有有效的Controller
+            if (fishAnimator.runtimeAnimatorController != null)
+            {
+                // 检查参数是否存在
+                if (HasAnimatorParameter(fishAnimator, fishDifficultyParameterName, AnimatorControllerParameterType.Int))
+                {
+                    fishAnimator.SetInteger(fishDifficultyParameterName, difficultyLevel);
+                    Debug.Log($"鱼动画机参数 '{fishDifficultyParameterName}' 设置为: {difficultyLevel}");
+                }
+                else
+                {
+                    Debug.LogWarning($"鱼动画机中没有找到整数参数: {fishDifficultyParameterName}");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("鱼Animator没有分配AnimatorController！");
+            }
+        }
+        else
+        {
+            Debug.LogWarning("鱼Animator引用为空或参数名为空");
+        }
+    }
     
+    /// <summary>
+    /// 检查Animator是否有指定的参数
+    /// </summary>
+    /// <param name="animator">动画控制器</param>
+    /// <param name="parameterName">参数名</param>
+    /// <param name="parameterType">参数类型</param>
+    /// <returns>是否存在该参数</returns>
+    private bool HasAnimatorParameter(Animator animator, string parameterName, AnimatorControllerParameterType parameterType)
+    {
+        if (animator == null || animator.runtimeAnimatorController == null)
+            return false;
+            
+        foreach (AnimatorControllerParameter param in animator.parameters)
+        {
+            if (param.name == parameterName && param.type == parameterType)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 从鱼脚本获取难度等级
+    /// </summary>
+    /// <returns>难度等级</returns>
+    private int GetFishDifficultyFromScript()
+    {
+        if (fishScript == null)
+        {
+            Debug.LogWarning("鱼脚本引用为空，使用默认难度等级1");
+            return 1;
+        }
+
+        // 直接从Fish脚本获取难度等级
+        return Mathf.Clamp(fishScript.difficultyLevel, 1, 5);
+    }
+
+    /// <summary>
+    /// 获取当前鱼的难度等级（从鱼脚本获取）
+    /// </summary>
+    /// <returns>当前难度等级</returns>
+    public int GetFishDifficultyLevel()
+    {
+        return GetFishDifficultyFromScript();
+    }
+
+    /// <summary>
+    /// 获取当前钓竿信息
+    /// </summary>
+    /// <returns>当前钓竿数据</returns>
+    public PoleManager.PoleData GetCurrentPole()
+    {
+        if (poleManager != null)
+        {
+            return poleManager.GetCurrentPole();
+        }
+        
+        Debug.LogWarning("FishingMinigame: PoleManager引用为空！");
+        return null;
+    }
+    
+    /// <summary>
+    /// 获取当前钓竿等级
+    /// </summary>
+    /// <returns>钓竿等级</returns>
+    public int GetCurrentPoleLevel()
+    {
+        if (poleManager != null)
+        {
+            return poleManager.GetCurrentPoleLevel();
+        }
+        
+        return 1; // 默认等级
+    }
+    
+    /// <summary>
+    /// 获取钓竿成功率加成
+    /// </summary>
+    /// <returns>成功率加成</returns>
+    public float GetPoleSuccessBonus()
+    {
+        if (poleManager != null)
+        {
+            return poleManager.GetSuccessBonus();
+        }
+        
+        return 0f; // 默认无加成
+    }
+
+    /// <summary>
+    /// 设置鱼的起始Y轴位置
+    /// </summary>
+    /// <param name="startY">起始Y轴位置（相对坐标）</param>
+    public void SetFishStartY(float startY)
+    {
+        fishStartY = startY;
+        // 更新起始位置
+        fishStartPosition = fishImage.position;
+        fishStartPosition.y = fishStartY;
+    }
+
     /// <summary>
     /// 游戏主循环
     /// </summary>
     private void Update()
     {
         if (!isGameActive) return;
-        
-        // 移动目标区域
-        MoveTargetArea();
-        
-        // 移动鱼
-        MoveFish();
-        
+
+        // 更新鱼的位置（匀加速运动）
+        //UpdateFishPosition();
+
         // 检查玩家输入
         CheckPlayerInput();
     }
-    
-    /// <summary>
-    /// 移动目标区域
-    /// </summary>
-    private void MoveTargetArea()
-    {
-        // 计算目标区域的移动
-        float moveAmount = targetMoveSpeed * Time.deltaTime / frameHeight;
-        if (isMovingRight)
-        {
-            targetCurrentPosition += moveAmount;
-            if (targetCurrentPosition >= targetMaxRange)
-            {
-                targetCurrentPosition = targetMaxRange;
-                isMovingRight = false;
-            }
-        }
-        else
-        {
-            targetCurrentPosition -= moveAmount;
-            if (targetCurrentPosition <= targetMinRange)
-            {
-                targetCurrentPosition = targetMinRange;
-                isMovingRight = true;
-            }
-        }
-        
-        // 更新目标区域位置
-        UpdateTargetPosition();
-    }
-    
-    /// <summary>
-    /// 更新目标区域的位置
-    /// </summary>
-    private void UpdateTargetPosition()
-    {
-        float yPos = Mathf.Lerp(-frameHeight/2, frameHeight/2, targetCurrentPosition);
-        Vector3 newPos = targetArea.position;
-        newPos.y = yPos;
-        targetArea.position = newPos;
-    }
-    
-    /// <summary>
-    /// 移动鱼
-    /// </summary>
-    private void MoveFish()
-    {
-        // 计算鱼的上升移动（基础Y位置的变化）
-        fishBaseY += fishUpwardSpeed * Time.deltaTime;
-        
-        // 计算鱼的上下摆动
-        fishBobPhase += fishBobSpeed * Time.deltaTime;
-        float bobOffset = Mathf.Sin(fishBobPhase) * fishBobAmplitude;
-        
-        // 更新鱼的位置（基础Y位置 + 摆动偏移）
-        Vector3 newPos = fishImage.position;
-        newPos.y = fishBaseY + bobOffset;
-        fishImage.position = newPos;
-    }
-    
+
+
     /// <summary>
     /// 检查玩家输入
     /// </summary>
@@ -209,7 +308,7 @@ public class FishingMinigame : MonoBehaviour
             }
         }
     }
-    
+
     /// <summary>
     /// 检查鱼是否在目标区域内（通过外部TriggerEvent设置isInArea）
     /// </summary>
@@ -218,7 +317,7 @@ public class FishingMinigame : MonoBehaviour
         // 直接返回isInArea的值，这个值将通过TriggerEvent设置
         return isInArea;
     }
-    
+
     /// <summary>
     /// 停止游戏
     /// </summary>
@@ -226,7 +325,7 @@ public class FishingMinigame : MonoBehaviour
     {
         isGameActive = false;
     }
-    
+
     /// <summary>
     /// 设置鱼是否在目标区域内（供TriggerEvent调用）
     /// </summary>
@@ -235,7 +334,7 @@ public class FishingMinigame : MonoBehaviour
     {
         isInArea = inArea;
     }
-    
+
     /// <summary>
     /// 触发鱼逃脱事件（供上边界TriggerEvent调用）
     /// </summary>
